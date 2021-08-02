@@ -12,10 +12,27 @@ This simpe program is for transfering data between two mongo nodes, including:
 
 ## 2.Usage
 
+* Requires
+  ```
+  gcc < 11
+
+  gcc==4.4 or gcc==4.8 is also good
+
+  ```
+
 * Get the source code
 
   ```shell
   $ git clone https://github.com/Qihoo360/mongosync.git
+  ```
+
+* install depenncies
+
+  ```
+  yum install -y scons
+  yum install -y boost boost-devel
+  yum install -y openssl-devel
+
   ```
 
 * Compile
