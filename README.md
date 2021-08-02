@@ -53,10 +53,15 @@ This simpe program is for transfering data between two mongo nodes, including:
   --dst_user arg           the destination mongodb server's logging user
   --dst_passwd arg         the destination mongodb server's logging password
   --dst_auth_db arg        the destination mongodb server's auth db
+  --is_mongos              the source mongodb server is mongos
+  --no_shard_auth          the source mongos server is no auth
+  --shard_user arg         the source mongos server's shard username
+  --shard_passwd arg       the source mongos server's shard password
   --dst_use_mcr            force destination connection to use MONGODB-CR password machenism
   --db arg                 the source database to be cloned
   --dst_db arg             the destination database
   --coll arg               the source collection to be cloned
+  --colls arg              the source collection list name
   --dst_coll arg           the destination collection
   --oplog                  whether to sync oplog
   --raw_oplog              whether to only clone oplog
@@ -65,6 +70,10 @@ This simpe program is for transfering data between two mongo nodes, including:
   --dst_op_ns arg          the destination namespace for raw oplog mode
   --no_index               whether to clone the db or collection corresponding index
   --filter arg             the bson format string used to filter the records to be transfered
+  --bg_num arg             the background thread number for cloning data(not oplog syncing and oplog storing)
+  --batch_size arg         the data grouping size criterion in cloning data(0-16M, default to 16M), unit is Byte
+  --log_level arg          specify the log level(INFO, WARN, FATAL)
+
   ```
 
 ## 3.Performance
