@@ -46,6 +46,7 @@ static void Usage() {
 	std::cerr << "--dst_passwd arg         the destination mongodb server's logging password" << std::endl;
 	std::cerr << "--dst_auth_db arg        the destination mongodb server's auth db" << std::endl;
 	std::cerr << "--is_mongos              the source mongodb server is mongos" << std::endl;
+	std::cerr << "--no_shard_auth          the source mongos server is no auth" << std::endl;
 	std::cerr << "--shard_user arg         the source mongos server's shard username" << std::endl;
 	std::cerr << "--shard_passwd arg       the source mongos server's shard password" << std::endl;
 	std::cerr << "--dst_use_mcr            force destination connection to use MONGODB-CR password machenism" << std::endl;
@@ -113,7 +114,9 @@ void Options::ParseCommand(int argc, char** argv) {
 			CHECK_ARGS_NUM();
 			dst_auth_db = argv[++idx];
 		} else if (strcasecmp(argv[idx], "--is_mongos") == 0) {
-      is_mongos = true;
+            is_mongos = true;
+		} else if (strcasecmp(argv[idx], "--no_shard_auth") == 0) {
+            no_shard_auth = true;
 		} else if (strcasecmp(argv[idx], "--shard_user") == 0) {
 			CHECK_ARGS_NUM();
 			shard_user = argv[++idx];
@@ -225,6 +228,7 @@ void Options::LoadConf(const std::string &conf_file) {
   GetConfStr("colls", &colls);
 
   GetConfBool("is_mongos", &is_mongos);
+  GetConfBool("no_shard_auth", &no_shard_auth);
   GetConfStr("shard_user", &shard_user);
   GetConfStr("shard_passwd", &shard_passwd);
 

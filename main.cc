@@ -52,7 +52,7 @@ int main(int argc, char *argv[]) {
   // mongos -> mongos
   if (opt.is_mongos) {
     std::vector<std::string> all_dbs;
-    if (opt.shard_user.empty() || opt.shard_passwd.empty()) {
+    if (!opt.no_shard_auth && (opt.shard_user.empty() || opt.shard_passwd.empty())) {
       LOG(FATAL)
         << "Shard username or password should not be empty when src is mongos\n"
         << std::endl;
