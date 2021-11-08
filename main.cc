@@ -108,7 +108,8 @@ int main(int argc, char *argv[]) {
         mongosync = MongoSync::NewMongoSync(&shard_opt);
       }
 
-      mongosync->MongosGetOplogOption();
+      // update oplog option move to MongoSync::GenericProcessOplog 
+      // mongosync->MongosGetOplogOption();
       shard_mongosync.push_back(mongosync);
     }
 

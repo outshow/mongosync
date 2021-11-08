@@ -47,8 +47,9 @@ struct OplogTime {
 struct Options {
 	Options()
     : src_auth_db("admin"),
-		  src_use_mcr(false),
+		src_use_mcr(false),
       is_mongos(false),
+      no_shard_auth(false),
 	    dst_auth_db("admin"),		
 		  dst_use_mcr(false),
 		  oplog(false),
@@ -64,10 +65,8 @@ struct Options {
 	std::string src_passwd;
 	std::string src_auth_db;
 	bool src_use_mcr;
-  bool is_mongos;
-
-  std::string shard_user;
-  std::string shard_passwd;
+    bool is_mongos;
+    bool no_shard_auth;
 
 	std::string dst_ip_port;
 	std::string dst_user;

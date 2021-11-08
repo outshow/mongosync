@@ -499,9 +499,11 @@ bool MongoSync::IsBalancerRunning() {
 void MongoSync::MongosGetOplogOption() {
   oplog_begin_ = opt_.oplog_start;
   if ((need_clone_all_db() || need_clone_db() || need_clone_coll()) && opt_.oplog_start.empty()) {
-    oplog_begin_ = GetSideOplogTime(src_conn_, oplog_ns_, "", "", false);
+      // set first_or_last according to opt_.is_mongos
+      // if opt_.is_mongos is true, first_or_last must be set to true
+      oplog_begin_ = GetSideOplogTime(src_conn_, oplog_ns_, "", "", opt_.is_mongos);
   } else if (opt_.oplog_start.empty()) {
-    oplog_begin_ = GetSideOplogTime(src_conn_, oplog_ns_, opt_.db, opt_.coll, true);
+      oplog_begin_ = GetSideOplogTime(src_conn_, oplog_ns_, opt_.db, opt_.coll, true);
   }
   oplog_finish_ = opt_.oplog_end;
 }
@@ -564,6 +566,8 @@ void MongoSync::SyncOplog() {
 void MongoSync::GenericProcessOplog(OplogProcessOp op) {
 	mongo::Query query;	
 
+    MongosGetOplogOption();
+    LOG(INFO) << MONGOSYNC_PROMPT << ", read from host: " << opt_.src_ip_port << ", oplog start: " << oplog_begin_.sec << ", " << oplog_begin_.no << ", oplog end: " << oplog_finish_.sec << ", " << oplog_finish_.no << std::endl;
 	if (/* !opt_.db.empty() &&*/ opt_.coll.empty()) { // both specifying db name and not specifying
 		query = mongo::Query(BSON("$or" << BSON_ARRAY(BSON("ns" << BSON("$regex" << ("^"+opt_.db))) << BSON("ns" << "admin.$cmd")) << "ts" << mongo::GTE << oplog_begin_.timestamp() << mongo::LTE << oplog_finish_.timestamp())); //TODO: this cannot exact out the opt_.db related oplog, but the opt_.db-prefixed related oplog
 	} else if (!opt_.db.empty() && !opt_.coll.empty()) {
@@ -822,6 +826,20 @@ void MongoSync::CloneColl(std::string src_ns, std::string dst_ns, int batch_size
 
   // Clone record
 retry:
+    // mongo::Query filterQuery;
+    // if (opt_.is_mongos) {
+    //     // https://docs.mongodb.com/v2.6/reference/method/cursor.snapshot/
+    //     // You must apply snapshot() to the cursor before retrieving any documents from the database.
+    //     // You can only use snapshot() with unsharded collections.
+    //     filterQuery = opt_.filter;
+    //     LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "querying "   << src_ns << " without snapshot " << std::endl
+    // }else{
+    //     // not mongos, use snapshot to query data
+    //     filterQuery = opt_.filter.snapshot();
+    //     LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "querying "   << src_ns << " with snapshot " << std::endl
+    // }
+	// cursor = src_conn_->query(src_ns, filterQuery, 0, 0, NULL,
+    //                         mongo::QueryOption_AwaitData | mongo::QueryOption_SlaveOk | mongo::QueryOption_NoCursorTimeout);
 	cursor = src_conn_->query(src_ns, opt_.filter.snapshot(), 0, 0, NULL,
                             mongo::QueryOption_AwaitData | mongo::QueryOption_SlaveOk | mongo::QueryOption_NoCursorTimeout);
 	std::vector<mongo::BSONObj> *batch = new std::vector<mongo::BSONObj>; //to be deleted by bg thread
