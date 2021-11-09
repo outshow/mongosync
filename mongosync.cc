@@ -879,7 +879,7 @@ retry:
 				if (time_cur > time_pre) {
 					percent = cnt * 100 / total;
 					snprintf(buf, sizeof(buf), "%d/%d", cnt, total);
-					LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "cloing progress: " << std::setfill(' ') << std::setw(20) << buf << "\t"<< percent << "%" << "\t(objects)" << std::endl;
+					LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << src_ns << " cloing progress: " << std::setfill(' ') << std::setw(20) << buf << "\t"<< percent << "%" << "\t(objects)" << std::endl;
 					time_pre = time_cur;
 				}
 			}
