@@ -71,7 +71,9 @@ This simpe program is for transfering data between two mongo nodes, including:
   --dst_passwd arg         the destination mongodb server's logging password
   --dst_auth_db arg        the destination mongodb server's auth db
   --is_mongos              the source mongodb server is mongos
-  --no_shard_auth          the source mongos server is no auth
+  --no_shard_auth          if the source mongos server has auth setting
+  --sd_sync_mode           the sync mode of stock data, normal or snapshot
+  --op_sync_mode           the sync mode of oplog, full or incr
   --shard_user arg         the source mongos server's shard username
   --shard_passwd arg       the source mongos server's shard password
   --dst_use_mcr            force destination connection to use MONGODB-CR password machenism
