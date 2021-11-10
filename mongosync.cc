@@ -71,7 +71,7 @@ static void Usage() {
 
 #define CHECK_ARGS_NUM() \
 	  if (argc <= idx + 1) { \
-			    LOG(FATAL) << util::GetFormatTime() << "Wrong argument number" << std::endl; \
+			    LOG(FATAL) << util::GetFormatTime() << "\tWrong argument number" << std::endl; \
 			    Usage(); \
 			    exit(-1); \
 		} \
@@ -179,14 +179,14 @@ void Options::ParseCommand(int argc, char** argv) {
 			CHECK_ARGS_NUM();
 			batch_size = atoi(argv[++idx]);
 			if (batch_size < 0 || batch_size > MAX_BATCH_BUFFER_SIZE) {
-				LOG(WARN) << util::GetFormatTime() << "The batch size specified is beyond the range, set to " << MAX_BATCH_BUFFER_SIZE << std::endl;
+				LOG(WARN) << util::GetFormatTime() << "\tThe batch size specified is beyond the range, set to " << MAX_BATCH_BUFFER_SIZE << std::endl;
 				batch_size = MAX_BATCH_BUFFER_SIZE;
 			}
 		} else if (strcasecmp(argv[idx], "--log_level") == 0) {
 			CHECK_ARGS_NUM();
 			log_level = argv[++idx];
 		} else {
-			LOG(FATAL) << util::GetFormatTime() << "Unkown options" << std::endl;
+			LOG(FATAL) << util::GetFormatTime() << "\tUnkown options" << std::endl;
 			Usage();
 			exit(-1);
 		}
@@ -197,7 +197,7 @@ void Options::ParseCommand(int argc, char** argv) {
 void Options::LoadConf(const std::string &conf_file) {
   std::ifstream in(conf_file.c_str());
   if (!in.good()) {
-		LOG(FATAL) << util::GetFormatTime() << "cannot open the specified conf file" << std::endl;
+		LOG(FATAL) << util::GetFormatTime() << "\tcannot open the specified conf file" << std::endl;
     exit(-1);
   }
   std::string line, item_key, item_value;
@@ -213,7 +213,7 @@ void Options::LoadConf(const std::string &conf_file) {
     }
     if ((pos = line.find("=")) == std::string::npos
         || pos == (line.size() - 1)) {
-      LOG(WARN) << util::GetFormatTime() << "error item format at " << line_no << "line in " << conf_file << std::endl;
+      LOG(WARN) << util::GetFormatTime() << "\terror item format at " << line_no << "line in " << conf_file << std::endl;
       continue;
     }
 
@@ -282,7 +282,7 @@ bool Options::GetConfBool(const std::string &item_key, bool *value) {
   } else if (strcasecmp(iter->second.c_str(), "off") == 0) {
     *value = false;
   } else {
-    LOG(WARN) << util::GetFormatTime() << item_key << " item in conf file is not BOOL" << std::endl;
+    LOG(WARN) << util::GetFormatTime() << "\t" << item_key << " item in conf file is not BOOL" << std::endl;
     return false;
   }
   return true;
@@ -320,24 +320,35 @@ bool Options::GetConfOplogTime(const std::string &item_key, OplogTime *value) {
 
 bool Options::ValidCheck() {
 	if (db.empty() && !coll.empty()) {
-		LOG(FATAL) << util::GetFormatTime() << "source collection is specified, but source database not" << std::endl;
+		LOG(FATAL) << util::GetFormatTime() << "\tsource collection is specified, but source database not" << std::endl;
 		return false;
 	}
 
 	if (dst_db.empty() && !dst_coll.empty()) {
-		LOG(FATAL) << util::GetFormatTime() << "destination collection is specified, but destination database not" << std::endl;
+		LOG(FATAL) << util::GetFormatTime() << "\tdestination collection is specified, but destination database not" << std::endl;
 		return false;
 	}
 	
 	if (!dst_coll.empty() && coll.empty()) {
-		LOG(FATAL) << util::GetFormatTime() << "destination collection is specified, but source collection not" << std::endl;
+		LOG(FATAL) << util::GetFormatTime() << "\tdestination collection is specified, but source collection not" << std::endl;
 		return false;
 	}
 
 	if (db.empty() && !dst_db.empty()) {
-		LOG(FATAL) << util::GetFormatTime() << "destination database is specified, but the source database not" << std::endl;
+		LOG(FATAL) << util::GetFormatTime() << "\tdestination database is specified, but the source database not" << std::endl;
 		return false;
 	}
+    
+    // check sd_sync_mode and op_sync_mode
+    if (sd_sync_mode != "normal" && sd_sync_mode != "snapshot") {
+		LOG(FATAL) << util::GetFormatTime() << "\tsd_sync_mode option = " << sd_sync_mode << " is invalid" << std::endl;
+        return false;
+    }
+
+    if (op_sync_mode != "full" && op_sync_mode != "incr") {
+		LOG(FATAL) << util::GetFormatTime() << "\top_sync_mode option = " << sd_sync_mode << " is invalid" << std::endl;
+        return false;
+    }
 
 	return true;
 }
@@ -388,7 +399,7 @@ MongoSync* MongoSync::NewMongoSync(const Options *opt) {
 bool MongoSync::GetReadableHost(std::string* readable_host) {
   mongo::BSONObj tmp;
   if (!src_conn_->runCommand("admin", BSON("replSetGetStatus" << 1), tmp, mongo::QueryOption_SlaveOk)) {
-    LOG(FATAL) << util::GetFormatTime() << "runCommand  falied replSetGetStatus" << std::endl;
+    LOG(FATAL) << util::GetFormatTime() << "\trunCommand  falied replSetGetStatus" << std::endl;
     return false;
   }
   if (!tmp.hasField("members")) {
@@ -419,25 +430,25 @@ mongo::DBClientConnection* MongoSync::ConnectAndAuth(const std::string &srv_ip_p
 	mongo::DBClientConnection* conn = NULL;
 	conn = new mongo::DBClientConnection();	
 	if (!conn->connect(srv_ip_port, errmsg)) {
-		LOG(FATAL) << util::GetFormatTime() << "connect to srv: " << srv_ip_port
+		LOG(FATAL) << util::GetFormatTime() << "\tconnect to srv: " << srv_ip_port
       << " failed, with errmsg: " << errmsg << std::endl;
 		delete conn;
 		return NULL;
 	}
   if (!bg) {
-    LOG(INFO) << util::GetFormatTime() << "connect to srv_rsv: " << srv_ip_port
+    LOG(INFO) << util::GetFormatTime() << "\tconnect to srv_rsv: " << srv_ip_port
       << " ok!" << std::endl;
   }
 
 	if (!passwd.empty()) {
 		if (!conn->auth(auth_db, user, passwd, errmsg, use_mcr)) {
-			LOG(FATAL) << util::GetFormatTime() << "srv: " << srv_ip_port
+			LOG(FATAL) << util::GetFormatTime() << "\tsrv: " << srv_ip_port
         << ", dbname: " << auth_db << " failed" << std::endl; 
 			delete conn;
 			return NULL;
 		}
     if (!bg) {
-		  LOG(INFO) << util::GetFormatTime() << "srv: " << srv_ip_port
+		  LOG(INFO) << util::GetFormatTime() << "\tsrv: " << srv_ip_port
         << ", dbname: " << auth_db << " ok!" << std::endl;
     }
 	}
@@ -602,16 +613,17 @@ retry:
                                                                  mongo::QueryOption_NoCursorTimeout |
                                                                  mongo::QueryOption_SlaveOk);
 
+  // NOTE: the try catch below is necessary?
+  // if the input option op_start cannot hit a record, the progress will be stopped.
   try {
     query = mongo::Query(BSON("ts" << oplog_begin_.timestamp()));
     mongo::BSONObj obj = src_conn_->findOne(oplog_ns_, query, NULL, mongo::QueryOption_SlaveOk);
     if (obj.isEmpty()) {
-      LOG(FATAL) << util::GetFormatTime() << "Can not find oplog at" << oplog_begin_.sec << ","
-        << oplog_begin_.no << " " << query.toString() << std::endl;
+        LOG(FATAL) << util::GetFormatTime() << MONGOSYNC_PROMPT << "Can not find oplog at" << oplog_begin_.sec << "," << oplog_begin_.no << " " << query.toString() << std::endl;
       exit(-1);
     }
   } catch (mongo::DBException& e) {
-    LOG(FATAL) << util::GetFormatTime() << "find oplog DBException: " << e.toString() << std::endl;
+    LOG(FATAL) << util::GetFormatTime() << MONGOSYNC_PROMPT << "find oplog DBException: " << e.toString() << std::endl;
     exit(-1);
   }
 
@@ -686,7 +698,7 @@ retry:
       int hash_id = 0;
 
       if (oplog.isEmpty()) {
-        LOG(WARN) << "oplog is empty" << std::endl;
+        LOG(WARN) << util::GetFormatTime() << MONGOSYNC_PROMPT << "oplog is empty" << std::endl;
         goto pass_oplog;
       }
       if (mongo::str::endsWith(oplog_ns, ".system.users")) { //filter all user related oplog, 2.4=>db.system.users, 3.x=>admin.system.users
@@ -711,7 +723,7 @@ retry:
       }
       type = oplog.getStringField("op");
       if (type.empty()) {
-        LOG(WARN) << util::GetFormatTime() << "oplog doesn't not has \"op\" filed" << std::endl;
+        LOG(WARN) << util::GetFormatTime() << MONGOSYNC_PROMPT << "oplog doesn't not has \"op\" filed" << std::endl;
         goto pass_oplog;
       }
       if (type.at(0) == 'c') {
@@ -767,12 +779,12 @@ pass_oplog:
         LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "synced up to " << cur_times.sec << "," << cur_times.no << " (" << util::GetFormatTime(cur_times.sec) << ")" << std::endl;
       }
     } catch (mongo::DBException &e) {
-      LOG(WARN) << util::GetFormatTime() << "sync oplog exception occurs: " << opt_.src_ip_port << e.toString() << ", retry it" << std::endl;
+      LOG(WARN) << util::GetFormatTime() << MONGOSYNC_PROMPT << "sync oplog exception occurs: " << opt_.src_ip_port << e.toString() << ", retry it" << std::endl;
       if (retries--) {
         delete args;
         goto retry;
       } else {
-        LOG(FATAL) << util::GetFormatTime() << "sync oplog occurs exception 3 times, exit" << std::endl;
+        LOG(FATAL) << util::GetFormatTime() << MONGOSYNC_PROMPT << "sync oplog occurs exception 3 times, exit" << std::endl;
         exit(-1);
       }
     }
@@ -889,12 +901,12 @@ retry:
   	  bg_thread_group_.AddWriteUnit(dst_ns, batch);
 		}
 	} catch (mongo::DBException &e) {
-		LOG(WARN) << util::GetFormatTime() << "exception occurs: " << opt_.src_ip_port << e.toString() << ", retry it" << std::endl;
+		LOG(WARN) << util::GetFormatTime() << MONGOSYNC_PROMPT << "exception occurs: " << opt_.src_ip_port << e.toString() << ", retry it" << std::endl;
 		delete batch;
 		if (retries--) {
 			goto retry;
 		} else {
-			LOG(FATAL) << util::GetFormatTime() << "occurs exception 3 times, exit" << std::endl;
+			LOG(FATAL) << util::GetFormatTime() << MONGOSYNC_PROMPT << "occurs exception 3 times, exit" << std::endl;
 			exit(-1);
 		}
 	}
@@ -1081,7 +1093,7 @@ void MongoSync::ApplyCmdOplog(mongo::DBClientConnection* dst_conn,
 	}
 	std::string str = obj.toString();
 	if (!dst_conn->runCommand(dst_db, obj, tmp, mongo::QueryOption_SlaveOk)) {
-		LOG(WARN) << util::GetFormatTime() << "administration oplog sync failed, with oplog: " << obj.toString() << ", errms: " << tmp << std::endl;
+		LOG(WARN) << util::GetFormatTime() << MONGOSYNC_PROMPT << "administration oplog sync failed, with oplog: " << obj.toString() << ", errms: " << tmp << std::endl;
 	}
 }
 
@@ -1098,7 +1110,7 @@ OplogTime MongoSync::GetSideOplogTime(mongo::DBClientConnection* conn, std::stri
 																																					<< BSON("ns" << ns.db() + ".system.indexes")
 																																					<< BSON("ns" << ns.db() + ".system.cmd")))).sort("$natural", order), NULL, mongo::QueryOption_SlaveOk);
 	} else {
-		LOG(FATAL) << util::GetFormatTime() << "get side oplog time erorr" << std::endl;
+		LOG(FATAL) << util::GetFormatTime() << MONGOSYNC_PROMPT << "get side oplog time erorr" << std::endl;
 		exit(-1);
 	}
 	return *reinterpret_cast<const OplogTime*>(obj["ts"].value());
@@ -1120,7 +1132,7 @@ int MongoSync::GetAllCollByVersion(mongo::DBClientConnection* conn, std::string 
 	if (version_header == "3.0." || version_header == "3.2." || version_header == "3.4.") {
 		mongo::BSONObj array;
 		if (!conn->runCommand(db, BSON("listCollections" << 1), tmp, mongo::QueryOption_SlaveOk)) {
-			LOG(FATAL) << util::GetFormatTime() << "get " << db << "'s collections failed" << std::endl;
+			LOG(FATAL) << util::GetFormatTime() << MONGOSYNC_PROMPT << "get " << db << "'s collections failed" << std::endl;
 			return -1;
 		}
 		array = tmp.getObjectField("cursor").getObjectField("firstBatch");
@@ -1131,7 +1143,7 @@ int MongoSync::GetAllCollByVersion(mongo::DBClientConnection* conn, std::string 
 	} else if (version_header == "2.4." || version_header == "2.6.") {
 		std::auto_ptr<mongo::DBClientCursor> cursor = conn->query(db + ".system.namespaces", mongo::Query().snapshot(), 0, 0, NULL, mongo::QueryOption_SlaveOk | mongo::QueryOption_NoCursorTimeout);
 		if (cursor.get() == NULL) {
-			LOG(FATAL) << util::GetFormatTime() << "get " << db << "'s collections failed" << std::endl;
+			LOG(FATAL) << util::GetFormatTime() << MONGOSYNC_PROMPT << "get " << db << "'s collections failed" << std::endl;
 			return -1;
 		}
 		std::string coll;
@@ -1149,7 +1161,7 @@ int MongoSync::GetAllCollByVersion(mongo::DBClientConnection* conn, std::string 
 			colls.push_back(coll.substr(coll.find(".")+1));
 		}	
 	} else {
-		LOG(FATAL) << util::GetFormatTime() << "version: " << version << " is not supported" << std::endl;
+		LOG(FATAL) << util::GetFormatTime() << MONGOSYNC_PROMPT << "version: " << version << " is not supported" << std::endl;
 		exit(-1);
 	}
 	return 0;
@@ -1161,7 +1173,7 @@ int MongoSync::GetCollIndexesByVersion(mongo::DBClientConnection* conn, std::str
 	std::string version_header = version.substr(0, 4);
 	if (version_header == "3.0." || version_header == "3.2." || version_header == "3.4.") {
 		if (!conn->runCommand(ns.db(), BSON("listIndexes" << ns.coll()), tmp, mongo::QueryOption_SlaveOk)) {
-			LOG(FATAL) << util::GetFormatTime() << coll_full_name << " get indexes failed" << std::endl;
+			LOG(FATAL) << util::GetFormatTime() << MONGOSYNC_PROMPT << coll_full_name << " get indexes failed" << std::endl;
 			return -1;
 		}
 		indexes = tmp.getObjectField("cursor").getObjectField("firstBatch").getOwned();
@@ -1170,7 +1182,7 @@ int MongoSync::GetCollIndexesByVersion(mongo::DBClientConnection* conn, std::str
 		mongo::BSONArrayBuilder array_builder;
 		cursor = conn->query(ns.db() + ".system.indexes", mongo::Query(BSON("ns" << coll_full_name)).snapshot(), 0, 0, 0, mongo::QueryOption_SlaveOk | mongo::QueryOption_NoCursorTimeout);
 		if (cursor.get() == NULL) {
-			LOG(FATAL) << util::GetFormatTime() << coll_full_name << " get indexes failed" << std::endl;
+			LOG(FATAL) << util::GetFormatTime() << MONGOSYNC_PROMPT << coll_full_name << " get indexes failed" << std::endl;
 			return -1;
 		}	
 		while (cursor->more()) {
@@ -1179,7 +1191,7 @@ int MongoSync::GetCollIndexesByVersion(mongo::DBClientConnection* conn, std::str
 		}
 		indexes = array_builder.arr();
 	} else {
-		LOG(FATAL) << util::GetFormatTime() << "version: " << version << " is not surpported" << std::endl;
+		LOG(FATAL) << util::GetFormatTime() << MONGOSYNC_PROMPT << "version: " << version << " is not surpported" << std::endl;
 		exit(-1);
 	}
 	return 0;
@@ -1194,7 +1206,7 @@ void MongoSync::SetCollIndexesByVersion(mongo::DBClientConnection* conn, std::st
 	} else if (version_header == "2.4." || version_header == "2.6.") {
 		conn->insert(ns.db() + ".system.indexes", index, 0, &mongo::WriteConcern::unacknowledged);	
 	} else {
-		LOG(FATAL) << util::GetFormatTime() << "version: " << version << " is not surpported" << std::endl;
+		LOG(FATAL) << util::GetFormatTime() << MONGOSYNC_PROMPT << "version: " << version << " is not surpported" << std::endl;
 		exit(-1);
 	}
 }

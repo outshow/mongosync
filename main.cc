@@ -28,11 +28,11 @@ int main(int argc, char *argv[]) {
 	 *  first set default log level to INFO
 	 */
 	mlog::Init(mlog::kInfo, "./log", "mongosync");
-	LOG(INFO) << util::GetFormatTime() << "monogosync started, first set log level to INFO" << std::endl;
+	LOG(INFO) << util::GetFormatTime() << "\tmonogosync started, first set log level to INFO" << std::endl;
 
   mongo::client::GlobalInstance instance;
   if (!instance.initialized()) {
-		LOG(FATAL) << util::GetFormatTime() << "failed to initialize the client driver: " << instance.status() << std::endl;
+		LOG(FATAL) << util::GetFormatTime() << "\tfailed to initialize the client driver: " << instance.status() << std::endl;
     exit(-1);
   }
 	
@@ -44,46 +44,39 @@ int main(int argc, char *argv[]) {
   }
 
 	if (!opt.log_level.empty()) {
-		LOG(INFO) << util::GetFormatTime() << "with log level option, set log level to " << opt.log_level << std::endl; 
+		LOG(INFO) << util::GetFormatTime() << "\twith log level option, set log level to " << opt.log_level << std::endl; 
 		if (!mlog::SetLogLevel(opt.log_level)) {
-			LOG(WARN) << util::GetFormatTime() << "log level option value invalid, set log level to default to INFO" << std::endl;
+			LOG(WARN) << util::GetFormatTime() << "\tlog level option value invalid, set log level to default to INFO" << std::endl;
 		}
 	}
+    // check opt
+    if (!opt.ValidCheck()) {
+        exit(-1);
+    }
     
-  // check sd_sync_mode and op_sync_mode
-    if (opt.sd_sync_mode != "normal" && opt.sd_sync_mode != "snapshot") {
-		LOG(FATAL) << util::GetFormatTime() << " sd_sync_mode option = " << opt.sd_sync_mode << " is invalid " << std::endl;
-        exit(-1);
-    }
-
-    if (opt.op_sync_mode != "full" && opt.op_sync_mode != "incr") {
-		LOG(FATAL) << util::GetFormatTime() << " op_sync_mode option = " << opt.sd_sync_mode << " is invalid " << std::endl;
-        exit(-1);
-    }
-
   // mongos -> mongos
   if (opt.is_mongos) {
     std::vector<std::string> all_dbs;
     if (!opt.no_shard_auth && (opt.shard_user.empty() || opt.shard_passwd.empty())) {
       LOG(FATAL)
         << util::GetFormatTime()
-        << "Shard username or password should not be empty when src is mongos\n"
+        << "\tShard username or password should not be empty when src is mongos\n"
         << std::endl;
       return -1;
     }
     // Get mongos shards host info
     MongoSync *mongos_mongosync = MongoSync::NewMongoSync(&opt);
     if (!mongos_mongosync) {
-      LOG(FATAL) << util::GetFormatTime() << "Create mongosync instance failed" << std::endl;
+      LOG(FATAL) << util::GetFormatTime() << "\tCreate mongosync instance failed" << std::endl;
       return -1;
     }
     std::vector<std::string> shards = mongos_mongosync->GetShards();
     if (mongos_mongosync->IsBalancerRunning()) {
-      LOG(FATAL) << util::GetFormatTime() << "Balancer is running" << std::endl;
+      LOG(FATAL) << util::GetFormatTime() << "\tBalancer is running" << std::endl;
       return -1;
     }
     if (mongos_mongosync->IsBigChunkExist()) {
-      LOG(FATAL) << util::GetFormatTime() << "Big chunk exist" << std::endl;
+      LOG(FATAL) << util::GetFormatTime() << "\tBig chunk exist" << std::endl;
       return -1;
     }
 
@@ -112,7 +105,7 @@ int main(int argc, char *argv[]) {
       mongosync = MongoSync::NewMongoSync(&shard_opt); // delete in thread
       std::string readable_host = shard_addr;
       if (!mongosync || !mongosync->GetReadableHost(&readable_host)) {
-        LOG(FATAL) << util::GetFormatTime() << "Create shard mongosync instance failed" << std::endl;
+        LOG(FATAL) << util::GetFormatTime() << "\tCreate shard mongosync instance failed" << std::endl;
         return -1;
       }
       if (readable_host != shard_addr) {
@@ -136,7 +129,7 @@ int main(int argc, char *argv[]) {
       ret = pthread_create(&tid, NULL, clone_db_thread, (void *)mongos_mongosync);
       if (ret != 0)
         return -1;
-      LOG(INFO) << util::GetFormatTime() << "New thread cloning db: " << all_dbs[i] << std::endl;
+      LOG(INFO) << util::GetFormatTime() << "\tNew thread cloning db: " << all_dbs[i] << std::endl;
       pthread_setname_np(tid, "clone_db_thread");
       tids.push_back(tid);
       while(cloning_thread > 10) {
@@ -148,7 +141,7 @@ int main(int argc, char *argv[]) {
       pthread_join(tids[i], NULL);
     }
 
-    LOG(INFO) << util::GetFormatTime() << "All db are cloned ... " << std::endl;
+    LOG(INFO) << util::GetFormatTime() << "\tAll db have been cloned ... " << std::endl;
 
     tids.clear();
     for (int i = 0; i < shard_mongosync.size(); i++) {
