@@ -66,6 +66,7 @@ struct Options {
 	std::string src_auth_db;
 	bool src_use_mcr;
     bool is_mongos;
+    std::string read_pref_mode;
     std::string sd_sync_mode;
     std::string op_sync_mode;
     bool no_shard_auth;

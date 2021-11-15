@@ -46,6 +46,7 @@ static void Usage() {
 	std::cerr << "--dst_passwd arg         the destination mongodb server's logging password" << std::endl;
 	std::cerr << "--dst_auth_db arg        the destination mongodb server's auth db" << std::endl;
 	std::cerr << "--is_mongos              the source mongodb server is mongos" << std::endl;
+	std::cerr << "--read_pref_mode         the read preference mode of read, primary or slave" << std::endl;
 	std::cerr << "--no_shard_auth          if the source mongos server has auth setting" << std::endl;
 	std::cerr << "--sd_sync_mode           the sync mode of stock data; normal or snapshot" << std::endl;
 	std::cerr << "--op_sync_mode           the sync mode of oplog; full or incr" << std::endl;
@@ -117,6 +118,9 @@ void Options::ParseCommand(int argc, char** argv) {
 			dst_auth_db = argv[++idx];
 		} else if (strcasecmp(argv[idx], "--is_mongos") == 0) {
             is_mongos = true;
+		} else if (strcasecmp(argv[idx], "--read_pref_mode") == 0) {
+			CHECK_ARGS_NUM();
+            read_pref_mode = argv[++idx];
 		} else if (strcasecmp(argv[idx], "--sd_sync_mode") == 0) {
 			CHECK_ARGS_NUM();
             sd_sync_mode = argv[++idx];
@@ -236,6 +240,7 @@ void Options::LoadConf(const std::string &conf_file) {
   GetConfStr("colls", &colls);
 
   GetConfBool("is_mongos", &is_mongos);
+  GetConfStr("read_pref_mode", &read_pref_mode);
   GetConfStr("sd_sync_mode", &sd_sync_mode);
   GetConfStr("op_sync_mode", &op_sync_mode);
   GetConfBool("no_shard_auth", &no_shard_auth);
@@ -346,7 +351,12 @@ bool Options::ValidCheck() {
     }
 
     if (op_sync_mode != "full" && op_sync_mode != "incr") {
-		LOG(FATAL) << util::GetFormatTime() << "\top_sync_mode option = " << sd_sync_mode << " is invalid" << std::endl;
+		LOG(FATAL) << util::GetFormatTime() << "\top_sync_mode option = " << op_sync_mode << " is invalid" << std::endl;
+        return false;
+    }
+
+    if (read_pref_mode != "primary" && op_sync_mode != "slave") {
+		LOG(FATAL) << util::GetFormatTime() << "\tread_pref_mode option = " << read_pref_mode << " is invalid" << std::endl;
         return false;
     }
 
@@ -868,8 +878,19 @@ retry:
         filterQuery = opt_.filter.snapshot();
         LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "cloning "   << src_ns << " in snapshot mode " << std::endl;
     }
-	cursor = src_conn_->query(src_ns, filterQuery, 0, 0, NULL,
-                            mongo::QueryOption_AwaitData | mongo::QueryOption_SlaveOk | mongo::QueryOption_NoCursorTimeout);
+
+    int queryOptions;
+    if (opt_.read_pref_mode == "primary") {
+        queryOptions = mongo::QueryOption_AwaitData | mongo::QueryOption_NoCursorTimeout;
+        LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "reading "   << src_ns << " in primary mode " << std::endl;
+    } else if (opt_.read_pref_mode == "slave") {
+        queryOptions = mongo::QueryOption_AwaitData | mongo::QueryOption_SlaveOk | mongo::QueryOption_NoCursorTimeout;
+        LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "reading "   << src_ns << " in slave mode " << std::endl;
+    }
+
+    LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "cloning "   << src_ns << " with query " << filterQuery.toString() << std::endl;
+
+	cursor = src_conn_->query(src_ns, filterQuery, 0, 0, NULL, queryOptions);
 	std::vector<mongo::BSONObj> *batch = new std::vector<mongo::BSONObj>; //to be deleted by bg thread
 	acc_size = 0;
 	percent = 0;
@@ -1093,7 +1114,7 @@ void MongoSync::ApplyCmdOplog(mongo::DBClientConnection* dst_conn,
 	}
 	std::string str = obj.toString();
 	if (!dst_conn->runCommand(dst_db, obj, tmp, mongo::QueryOption_SlaveOk)) {
-		LOG(WARN) << util::GetFormatTime() << MONGOSYNC_PROMPT << "administration oplog sync failed, with oplog: " << obj.toString() << ", errms: " << tmp << std::endl;
+		LOG(WARN) << util::GetFormatTime() << "\tadministration oplog sync failed, with oplog: " << obj.toString() << ", errms: " << tmp << std::endl;
 	}
 }
 
@@ -1206,7 +1227,7 @@ void MongoSync::SetCollIndexesByVersion(mongo::DBClientConnection* conn, std::st
 	} else if (version_header == "2.4." || version_header == "2.6.") {
 		conn->insert(ns.db() + ".system.indexes", index, 0, &mongo::WriteConcern::unacknowledged);	
 	} else {
-		LOG(FATAL) << util::GetFormatTime() << MONGOSYNC_PROMPT << "version: " << version << " is not surpported" << std::endl;
+		LOG(FATAL) << util::GetFormatTime() << "\tversion: " << version << " is not surpported" << std::endl;
 		exit(-1);
 	}
 }
