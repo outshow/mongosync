@@ -118,30 +118,37 @@ int main(int argc, char *argv[]) {
       shard_mongosync.push_back(mongosync);
     }
 
-    for (int i = 0; i < all_dbs.size(); i++) {
-      Options subopt(opt);
-      subopt.db = all_dbs[i];
-      if (!opt.db.empty() && subopt.db != opt.db) {
-        continue;
-      }
-      cloning_thread++;
-      mongos_mongosync = MongoSync::NewMongoSync(&subopt);
-      ret = pthread_create(&tid, NULL, clone_db_thread, (void *)mongos_mongosync);
-      if (ret != 0)
-        return -1;
-      LOG(INFO) << util::GetFormatTime() << "\tNew thread cloning db: " << all_dbs[i] << std::endl;
-      pthread_setname_np(tid, "clone_db_thread");
-      tids.push_back(tid);
-      while(cloning_thread > 10) {
-        sleep(1);
-      }
-    }
+    if (opt.only_sync_oplog) {
+        // only sync oplog
+        LOG(INFO) << util::GetFormatTime() << "\tSkip data cloned, only sync oplog start at: " << opt.oplog_start.sec<< "," << opt.oplog_start.no << " and stop at: " << opt.oplog_end.sec << "," << opt.oplog_end.no << std::endl;
+    }else{
+        // cloned data
+        LOG(INFO) << util::GetFormatTime() << "\tStart cloeing data ... " << std::endl;
+        for (int i = 0; i < all_dbs.size(); i++) {
+          Options subopt(opt);
+          subopt.db = all_dbs[i];
+          if (!opt.db.empty() && subopt.db != opt.db) {
+            continue;
+          }
+          cloning_thread++;
+          mongos_mongosync = MongoSync::NewMongoSync(&subopt);
+          ret = pthread_create(&tid, NULL, clone_db_thread, (void *)mongos_mongosync);
+          if (ret != 0)
+            return -1;
+          LOG(INFO) << util::GetFormatTime() << "\tNew thread cloning db: " << all_dbs[i] << std::endl;
+          pthread_setname_np(tid, "clone_db_thread");
+          tids.push_back(tid);
+          while(cloning_thread > 10) {
+            sleep(1);
+          }
+        }
 
-    for (int i = 0; i < tids.size(); i++) {
-      pthread_join(tids[i], NULL);
-    }
+        for (int i = 0; i < tids.size(); i++) {
+          pthread_join(tids[i], NULL);
+        }
 
-    LOG(INFO) << util::GetFormatTime() << "\tAll db have been cloned ... " << std::endl;
+        LOG(INFO) << util::GetFormatTime() << "\tAll db have been cloned ... " << std::endl;
+    }
 
     tids.clear();
     for (int i = 0; i < shard_mongosync.size(); i++) {

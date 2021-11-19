@@ -154,6 +154,8 @@ void Options::ParseCommand(int argc, char** argv) {
 			dst_coll = argv[++idx];
 		} else if (strcasecmp(argv[idx], "--oplog") == 0) {
 			oplog = true;
+		} else if (strcasecmp(argv[idx], "--only_sync_oplog") == 0) {
+			only_sync_oplog = true;
 		} else if (strcasecmp(argv[idx], "--raw_oplog") == 0) {
 			raw_oplog = true;
 		} else if (strcasecmp(argv[idx], "--op_start") == 0) {
@@ -256,6 +258,7 @@ void Options::LoadConf(const std::string &conf_file) {
   GetConfStr("dst_coll", &dst_coll);
 
   GetConfBool("oplog", &oplog);   
+  GetConfBool("only_sync_oplog", &only_sync_oplog);   
   GetConfBool("raw_oplog", &raw_oplog);   
   GetConfOplogTime("op_start", &oplog_start);   
   GetConfOplogTime("op_end", &oplog_end);
@@ -622,17 +625,17 @@ retry:
 
     // NOTE: the try catch below is necessary?
     // if the input option op_start cannot hit a record, the progress will be stopped.
-    try {
-        query = mongo::Query(BSON("ts" << oplog_begin_.timestamp()));
-        mongo::BSONObj obj = src_conn_->findOne(oplog_ns_, query, NULL, mongo::QueryOption_SlaveOk);
-        if (obj.isEmpty()) {
-            LOG(FATAL) << util::GetFormatTime() << MONGOSYNC_PROMPT << "Can not find oplog at" << oplog_begin_.sec << "," << oplog_begin_.no << " " << query.toString() << std::endl;
-            exit(-1);
-        }
-    } catch (mongo::DBException& e) {
-        LOG(FATAL) << util::GetFormatTime() << MONGOSYNC_PROMPT << "find oplog DBException: " << e.toString() << std::endl;
-        exit(-1);
-    }
+    // try {
+    //     query = mongo::Query(BSON("ts" << oplog_begin_.timestamp()));
+    //     mongo::BSONObj obj = src_conn_->findOne(oplog_ns_, query, NULL, mongo::QueryOption_SlaveOk);
+    //     if (obj.isEmpty()) {
+    //         LOG(FATAL) << util::GetFormatTime() << MONGOSYNC_PROMPT << "Can not find oplog at" << oplog_begin_.sec << "," << oplog_begin_.no << " " << query.toString() << std::endl;
+    //         exit(-1);
+    //     }
+    // } catch (mongo::DBException& e) {
+    //     LOG(FATAL) << util::GetFormatTime() << MONGOSYNC_PROMPT << "find oplog DBException: " << e.toString() << std::endl;
+    //     exit(-1);
+    // }
 
     std::string dst_db, dst_coll;
     if (need_clone_oplog()) {

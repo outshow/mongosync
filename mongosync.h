@@ -53,6 +53,7 @@ struct Options {
 	    dst_auth_db("admin"),		
 		  dst_use_mcr(false),
 		  oplog(false),
+		  only_sync_oplog(false),
       raw_oplog(false),
       dst_oplog_ns("sync.oplog"),
       no_index(false),
@@ -87,6 +88,7 @@ struct Options {
 	std::string dst_coll;
 
 	bool oplog;
+	bool only_sync_oplog;
 	OplogTime oplog_start;
 	OplogTime oplog_end;  //the time is inclusive
 
