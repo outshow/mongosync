@@ -191,68 +191,75 @@ void BGThreadGroup::AddWriteUnit(OplogArgs *args, void *(*handle_fun)(void *)) {
   pthread_mutex_unlock(&mlock_);  
 }
 
-void *BGThreadGroup::Run(void *arg) {
-  BGThreadGroup *thread_ptr = reinterpret_cast<BGThreadGroup *>(arg);
-	mongo::DBClientConnection *conn = MongoSync::ConnectAndAuth(thread_ptr->srv_ip_port(), thread_ptr->auth_db(), thread_ptr->user(), thread_ptr->passwd(), thread_ptr->use_mcr(), true);
-	if (!conn) {
-		return NULL;
-	}
-
-  std::queue<WriteUnit> *queue_p = thread_ptr->write_queue_p();
-  pthread_mutex_t *queue_mutex_p = thread_ptr->mlock_p();
-  pthread_cond_t *queue_cond_p = thread_ptr->clock_p();
-  WriteUnit unit;
-
-  while (!thread_ptr->should_exit()) {
-
-  	pthread_mutex_lock(queue_mutex_p);
-    while (queue_p->empty() && !thread_ptr->should_exit()) {
-      pthread_cond_wait(queue_cond_p, queue_mutex_p);
-    }
-    
-    if (thread_ptr->should_exit()) {
-  		pthread_mutex_unlock(queue_mutex_p);
-      break;
+void* BGThreadGroup::Run(void* arg)
+{
+    BGThreadGroup* thread_ptr = reinterpret_cast<BGThreadGroup*>(arg);
+    mongo::DBClientConnection* conn = MongoSync::ConnectAndAuth(thread_ptr->srv_ip_port(), thread_ptr->auth_db(), thread_ptr->user(), thread_ptr->passwd(), thread_ptr->use_mcr(), true);
+    if (!conn) {
+        return NULL;
     }
 
-    unit = queue_p->front();
-    queue_p->pop();
-    pthread_mutex_unlock(queue_mutex_p);
+    std::queue<WriteUnit>* queue_p = thread_ptr->write_queue_p();
+    pthread_mutex_t* queue_mutex_p = thread_ptr->mlock_p();
+    pthread_cond_t* queue_cond_p = thread_ptr->clock_p();
+    WriteUnit unit;
 
-    int retries = 3;
-retry:
-    try {
-      if (thread_ptr->is_apply_oplog()) {
-        unit.args->dst_conn = conn;
-        unit.handle((void *)unit.args);
-        // LOG(WARN) << "insert oplog to dst server: " << unit.args->oplog.toString(0, 0) << std::endl;
-        delete unit.args;
-      } else {
-        conn->insert(unit.ns, *(unit.batch),
-                     mongo::InsertOption_ContinueOnError, &mongo::WriteConcern::unacknowledged); 
-        delete unit.batch;
-      }
-    } catch (mongo::DBException &e) {
-      if (thread_ptr->is_apply_oplog()) {
-        LOG(WARN) << "exception occurs when insert oplog to dst server: " << e.toString() <<
-          unit.args->oplog.toString() << std::endl;
-      } else {
-        LOG(WARN) << "exception occurs when insert data to dst server: " << e.toString() << std::endl;
-        for (int i = 0; i < unit.batch->size(); i++) {
-          LOG(WARN) << "exception bson data: " << (*(unit.batch))[i].toString() << std::endl;
+    while (!thread_ptr->should_exit()) {
+
+        pthread_mutex_lock(queue_mutex_p);
+        while (queue_p->empty() && !thread_ptr->should_exit()) {
+            pthread_cond_wait(queue_cond_p, queue_mutex_p);
         }
-      }
-      if (retries--) {
-        goto retry;
-      } else {
-        LOG(FATAL) << "insert exception occur 3 times, exit" << std::endl;
-        exit(-1);
-      }
-    }
-  }
 
-	delete conn;
-  return NULL;
+        if (thread_ptr->should_exit()) {
+            pthread_mutex_unlock(queue_mutex_p);
+            break;
+        }
+
+        unit = queue_p->front();
+        queue_p->pop();
+        pthread_mutex_unlock(queue_mutex_p);
+
+        int retries = 3;
+    retry:
+        try {
+            if (thread_ptr->is_apply_oplog()) {
+                unit.args->dst_conn = conn;
+                unit.handle((void*)unit.args);
+                // LOG(WARN) << "insert oplog to dst server: " << unit.args->oplog.toString(0, 0) << std::endl;
+                delete unit.args;
+            } else {
+                conn->insert(unit.ns, *(unit.batch),
+                    mongo::InsertOption_ContinueOnError, &mongo::WriteConcern::unacknowledged);
+                delete unit.batch;
+            }
+        } catch (mongo::DBException& e) {
+            if (thread_ptr->is_apply_oplog()) {
+                LOG(WARN) << GetFormatTime() << unit.args->promot << "exception occurs when insert oplog to dst server, oplog=" << unit.args->oplog.toString() << ", exception message=" << e.toString() << ", retries=" << retries << std::endl;
+            } else {
+                LOG(WARN) << GetFormatTime() << unit.args->promot << "exception occurs when insert data to dst server: " << e.toString() << ", retries=" << retries << std::endl;
+                for (int i = 0; i < unit.batch->size(); i++) {
+                    LOG(WARN) << GetFormatTime() << unit.args->promot << "exception bson data: " << (*(unit.batch))[i].toString() << std::endl;
+                }
+            }
+            if (retries--) {
+                goto retry;
+            } else {
+                if (thread_ptr->is_apply_oplog()) {
+                    LOG(FATAL) << GetFormatTime() << unit.args->promot << "insert exception occur 3 times when insert oplog to dst server, exit!! oplog=" << unit.args->oplog.toString() << ", exception message=" << e.toString() << std::endl;
+                } else {
+                    LOG(FATAL) << GetFormatTime() << unit.args->promot << "insert exception occur 3 times when insert data to dst server, exit!! exception message=" << e.toString() << std::endl;
+                    for (int i = 0; i < unit.batch->size(); i++) {
+                        LOG(FATAL) << GetFormatTime() << unit.args->promot << "insert failed bson data: " << (*(unit.batch))[i].toString() << std::endl;
+                    }
+                }
+                exit(-1);
+            }
+        }
+    }
+
+    delete conn;
+    return NULL;
 }
 
 }
