@@ -782,7 +782,7 @@ retry:
                 memcpy(&cur_times, oplog["ts"].value(), 2 * sizeof(int32_t));
                 LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "oplog is porcessed, oplog=" << oplog.toString() << std::endl;
             } else {
-                LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "id_obj of oplog is empty, oplog=" << oplog.toString() << std::endl;
+                LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "empty id_obj oplog is ignored, oplog=" << oplog.toString() << std::endl;
             }
 
         pass_oplog:
