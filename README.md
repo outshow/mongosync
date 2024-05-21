@@ -23,7 +23,7 @@ This simpe program is for transfering data between two mongo nodes, including:
 * Get the source code
 
   ```shell
-  $ git clone https://github.com/Qihoo360/mongosync.git
+  $ git clone https://github.com/outshow/mongosync.git
   ```
 
 * install depenncies
