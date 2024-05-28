@@ -531,6 +531,7 @@ bool MongoSync::IsBalancerRunning() {
 }
 
 void MongoSync::MongosGetOplogOption() {
+  // op_sync_mode decides the oplog sync start option
   bool from_first = false;
   if (opt_.op_sync_mode == "full") {
       from_first = true;
@@ -538,15 +539,20 @@ void MongoSync::MongosGetOplogOption() {
       from_first = false;
   }
 
-  oplog_begin_ = opt_.oplog_start;
-  if ((need_clone_all_db() || need_clone_db() || need_clone_coll()) && opt_.oplog_start.empty()) {
-      // set first_or_last according to opt_.is_mongos
-      // if opt_.is_mongos is true, first_or_last must be set to true
-      oplog_begin_ = GetSideOplogTime(src_conn_, oplog_ns_, "", "", from_first);
-  } else if (opt_.oplog_start.empty()) {
+  if (opt_.oplog_start.empty()) {
       oplog_begin_ = GetSideOplogTime(src_conn_, oplog_ns_, opt_.db, opt_.coll, from_first);
+  } else {
+    oplog_begin_ = opt_.oplog_start;
   }
   oplog_finish_ = opt_.oplog_end;
+
+  // oplog_begin_ = opt_.oplog_start;
+  // if ((need_clone_all_db() || need_clone_db() || need_clone_coll()) && opt_.oplog_start.empty()) {
+  //     oplog_begin_ = GetSideOplogTime(src_conn_, oplog_ns_, "", "", from_first);
+  // } else if (opt_.oplog_start.empty()) {
+  //     oplog_begin_ = GetSideOplogTime(src_conn_, oplog_ns_, opt_.db, opt_.coll, from_first);
+  // }
+  // oplog_finish_ = opt_.oplog_end;
 }
 
 void MongoSync::MongosCloneDb() {
@@ -618,8 +624,11 @@ void MongoSync::GenericProcessOplog(OplogProcessOp op)
         query = mongo::Query(BSON("$or" << BSON_ARRAY(BSON("ns" << ns.ns()) << BSON("ns" << ns.db() + ".system.indexes") << BSON("ns" << ns.db() + ".$cmd") << BSON("ns" << "admin.$cmd")) << "ts" << mongo::GTE << oplog_begin_.timestamp() << mongo::LTE << oplog_finish_.timestamp()));
     }
     int retries = 3;
-    LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "Start sync oplog:" << query.toString() << std::endl;
 retry:
+    LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "Start sync oplog:" << query.toString() << ", retry: " << 3-retries << std::endl;
+    uint64_t total_oplogs = src_conn_->count(oplog_ns_, query, mongo::QueryOption_SlaveOk | mongo::QueryOption_NoCursorTimeout);
+    LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "Total [" << total_oplogs << "] oplogs need to be caught up" << std::endl;
+
     std::auto_ptr<mongo::DBClientCursor> cursor = src_conn_->query(oplog_ns_, query, 0, 0, NULL,
         mongo::QueryOption_CursorTailable | mongo::QueryOption_AwaitData | mongo::QueryOption_NoCursorTimeout | mongo::QueryOption_SlaveOk);
 
@@ -780,7 +789,8 @@ retry:
                 args->promot = MONGOSYNC_PROMPT;
                 oplog_bg_thread_group_[hash_id]->AddWriteUnit(args, MongoSync::ProcessSingleOplog);
                 memcpy(&cur_times, oplog["ts"].value(), 2 * sizeof(int32_t));
-                LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "oplog is porcessed, oplog=" << oplog.toString() << std::endl;
+                // the log below will use lots of disk space
+                // LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "oplog is porcessed, oplog=" << oplog.toString() << std::endl;
             } else {
                 LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "empty id_obj oplog is ignored, oplog=" << oplog.toString() << std::endl;
             }
@@ -809,6 +819,9 @@ retry:
                 LOG(FATAL) << util::GetFormatTime() << MONGOSYNC_PROMPT << "sync oplog occurs exception 3 times, exit!! exception message:"<< e.toString() << std::endl;
                 exit(-1);
             }
+        } catch (std::exception &ex) {
+            LOG(FATAL) << util::GetFormatTime() << MONGOSYNC_PROMPT << "some error occured during sync oplog: " << ex.what() << std::endl;
+            exit(-1);
         }
     }
 }
@@ -878,31 +891,30 @@ void MongoSync::CloneColl(std::string src_ns, std::string dst_ns, int batch_size
 
   // Clone record
 retry:
-    mongo::Query filterQuery;
+    mongo::Query filter_query(opt_.filter);
+    // https://docs.mongodb.com/v2.6/reference/method/cursor.snapshot/
+    // You must apply snapshot() to the cursor before retrieving any documents from the database.
+    // You can only use snapshot() with unsharded collections.
+    // *** use snapshot is the best practice ***
     if (opt_.sd_sync_mode == "normal") {
-        // https://docs.mongodb.com/v2.6/reference/method/cursor.snapshot/
-        // You must apply snapshot() to the cursor before retrieving any documents from the database.
-        // You can only use snapshot() with unsharded collections.
-        filterQuery = opt_.filter;
-        LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "cloning "   << src_ns << " in normal mode " << std::endl;
+        // nothing
     }else if (opt_.sd_sync_mode == "snapshot") {
-        // not mongos, use snapshot to query data
-        filterQuery = opt_.filter.snapshot();
-        LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "cloning "   << src_ns << " in snapshot mode " << std::endl;
+        // filterQuery = opt_.filter.snapshot();
+        filter_query = filter_query.snapshot();
     }
+    LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "cloning " << src_ns << " in " << opt_.sd_sync_mode << " mode " << std::endl;
 
-    int queryOptions;
+    int query_options;
     if (opt_.read_pref_mode == "primary") {
-        queryOptions = mongo::QueryOption_AwaitData | mongo::QueryOption_NoCursorTimeout;
-        LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "reading "   << src_ns << " in primary mode " << std::endl;
+        query_options = mongo::QueryOption_AwaitData | mongo::QueryOption_NoCursorTimeout;
     } else if (opt_.read_pref_mode == "slave") {
-        queryOptions = mongo::QueryOption_AwaitData | mongo::QueryOption_SlaveOk | mongo::QueryOption_NoCursorTimeout;
-        LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "reading "   << src_ns << " in slave mode " << std::endl;
+        query_options = mongo::QueryOption_AwaitData | mongo::QueryOption_SlaveOk | mongo::QueryOption_NoCursorTimeout;
     }
+    LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "reading " << src_ns << " in " << opt_.read_pref_mode <<" mode " << std::endl;
 
-    LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "cloning "   << src_ns << " with query " << filterQuery.toString() << std::endl;
+    LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "cloning " << src_ns << " with query " << filter_query.toString() << std::endl;
 
-	cursor = src_conn_->query(src_ns, filterQuery, 0, 0, NULL, queryOptions);
+	cursor = src_conn_->query(src_ns, filter_query, 0, 0, NULL, query_options);
 	std::vector<mongo::BSONObj> *batch = new std::vector<mongo::BSONObj>; //to be deleted by bg thread
 	acc_size = 0;
 	percent = 0;
@@ -914,8 +926,8 @@ retry:
 			acc_size += obj.objsize();
 			batch->push_back(obj.getOwned());
 			if (acc_size >= batch_size) {
-  	    bg_thread_group_.AddWriteUnit(dst_ns, batch);
-  	    batch = new std::vector<mongo::BSONObj>;
+                bg_thread_group_.AddWriteUnit(dst_ns, batch);
+                batch = new std::vector<mongo::BSONObj>;
 				acc_size = 0;
 			}
 			++cnt;
@@ -930,8 +942,8 @@ retry:
 			}
 		}
 		if (!batch->empty()) {
-//      dst_conn_->insert(dst_ns, batch, mongo::InsertOption_ContinueOnError, &mongo::WriteConcern::unacknowledged);
-  	  bg_thread_group_.AddWriteUnit(dst_ns, batch);
+            //  dst_conn_->insert(dst_ns, batch, mongo::InsertOption_ContinueOnError, &mongo::WriteConcern::unacknowledged);
+  	        bg_thread_group_.AddWriteUnit(dst_ns, batch);
 		}
 	} catch (mongo::DBException &e) {
 		LOG(WARN) << util::GetFormatTime() << MONGOSYNC_PROMPT << "exception occurs: " << opt_.src_ip_port << e.toString() << ", retry it" << std::endl;
@@ -944,9 +956,9 @@ retry:
 		}
 	}
 
-  while (!bg_thread_group_.write_queue_p()->empty()) {
-    sleep(1);
-  }
+    while (!bg_thread_group_.write_queue_p()->empty()) {
+        sleep(1);
+    }
 
 	LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "clone "	<< src_ns << " to " << dst_ns << " success, total " << cnt << " objects\n" << std::endl;
 }
@@ -975,7 +987,7 @@ void MongoSync::CloneCollIndex(std::string sns, std::string dns) {
 		builder << "ns" << dns;
 		SetCollIndexesByVersion(dst_conn_, dst_version_, dns, builder.obj());
 	}
-	LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "clone " << sns << " indexes success, total " << indexes_num << "objects\n" << std::endl;
+	LOG(INFO) << util::GetFormatTime() << MONGOSYNC_PROMPT << "clone " << sns << " indexes success, total " << indexes_num << " objects\n" << std::endl;
 }
 
 void *MongoSync::ProcessSingleOplog(void *pargs) {

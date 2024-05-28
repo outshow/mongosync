@@ -151,6 +151,7 @@ int main(int argc, char *argv[]) {
     }
 
     tids.clear();
+    LOG(INFO) << util::GetFormatTime() << "\tStart sync oplog start at: " << opt.oplog_start.sec<< "," << opt.oplog_start.no << " and stop at: " << opt.oplog_end.sec << "," << opt.oplog_end.no << std::endl;
     for (int i = 0; i < shard_mongosync.size(); i++) {
       MongoSync* mongosync = shard_mongosync[i];
       ret = pthread_create(&tid, NULL, sync_oplog_thread, (void *)mongosync);
